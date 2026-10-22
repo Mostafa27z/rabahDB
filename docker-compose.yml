@@ -1,0 +1,81 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tamleekdb-app
+    env_file:
+      - .env.production
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+    volumes:
+      - ./:/var/www/html
+      - /var/www/html/vendor  # Prevent vendor from being overwritten
+      - /var/www/html/node_modules  # Prevent node_modules from being overwritten
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "php-fpm", "-t"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - tamleek
+
+  db:
+    image: mariadb:10.11
+    container_name: tamleekdb-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MARIADB_INITDB_SKIP_TZINFO: 1
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - tamleek
+
+  nginx:
+    image: nginx:alpine
+    container_name: tamleekdb-nginx
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./:/var/www/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./docker/nginx/logs:/var/log/nginx
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tamleek
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  tamleek:
+    driver: bridge
