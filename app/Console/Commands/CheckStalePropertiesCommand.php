@@ -43,7 +43,7 @@ class CheckStalePropertiesCommand extends Command
             return Command::SUCCESS;
         }
 
-        $noticeAdminEmail = config('mail.mailers.notice.username', 'NOTICE@tamleekuae.com');
+        $noticeAdminEmail = config('mail.mailers.notice.username', 'notice@rabah.eg');
 
         foreach ($staleProperties as $property) {
             $daysSince = (int)now()->diffInDays($property->updated_at);

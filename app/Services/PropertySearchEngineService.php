@@ -481,6 +481,7 @@ class PropertySearchEngineService
             $purposeTag = match($p->getAttribute('purpose')) {
                 'rent' => 'ايجار للايجار rent rental',
                 'sale' => 'بيع للبيع sale',
+                'investment', 'invest' => 'استثمار للاستثمار investment invest',
                 default => ''
             };
             if ($purposeTag !== '') {

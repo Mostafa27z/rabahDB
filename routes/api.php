@@ -11,8 +11,6 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 
 use App\Http\Controllers\Api\AdController;
-use App\Http\Controllers\Api\SectionController;
-use App\Http\Controllers\Api\SubsectionController;
 
 // Public ad routes (Local DB)
 Route::get('/ads/active', [AdController::class, 'active']);
@@ -117,6 +115,10 @@ use App\Http\Controllers\Api\CommunicationController;
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/communication/comment', [CommunicationController::class, 'addComment']);
+    Route::get('/leads', [CommunicationController::class, 'indexLeads']);
+    Route::patch('/leads/{id}', [CommunicationController::class, 'updateLead']);
+    Route::put('/leads/{id}', [CommunicationController::class, 'updateLead']);
+    Route::delete('/leads/{id}', [CommunicationController::class, 'destroyLead']);
 });
 
 Route::post('/communication/lead', [CommunicationController::class, 'storeLead']);
@@ -127,26 +129,9 @@ use App\Http\Controllers\Api\CompanyDetailController;
 // Public
 Route::get('/company-details', [CompanyDetailController::class, 'show']);
 
-// Section & Subsection Routes
-
-// Public (No Auth Required)
-Route::get('/sections', [SectionController::class, 'index']);
-Route::get('/sections/{idOrName}', [SectionController::class, 'show']);
-Route::get('/subsections', [SubsectionController::class, 'index']);
-Route::get('/subsections/{id}', [SubsectionController::class, 'show']);
-
 // Protected (Admin Only)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/company-details', [CompanyDetailController::class, 'store']);
-
-    // Sections
-    Route::post('/sections', [SectionController::class, 'store']);
-    Route::put('/sections/{id}', [SectionController::class, 'update']);
-    Route::delete('/sections/{id}', [SectionController::class, 'destroy']);
-
-    // Subsections
-    Route::post('/subsections', [SubsectionController::class, 'store']);
-    Route::put('/subsections/{id}', [SubsectionController::class, 'update']);
-    Route::delete('/subsections/{id}', [SubsectionController::class, 'destroy']);
 });
+
 

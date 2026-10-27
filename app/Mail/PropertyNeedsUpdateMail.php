@@ -32,7 +32,7 @@ class PropertyNeedsUpdateMail extends Mailable
         $subject = "[تنبيه تحديث] مر أكثر من {$this->daysSinceUpdate} يوماً على العقار: {$this->property->title} (#{$ref})";
 
         return $this->mailer('notice')
-            ->from(config('mail.mailers.notice.username', 'NOTICE@tamleekuae.com'), 'منظومة عقارات تمليك - Tamleek Alerts')
+            ->from(config('mail.mailers.notice.username', 'notice@rabah.eg'), 'منظومة عقارات رباح - Rabah Alerts')
             ->subject($subject)
             ->view('emails.property_needs_update');
     }

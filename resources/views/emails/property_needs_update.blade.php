@@ -157,7 +157,7 @@
     <div class="container" dir="rtl" style="max-width: 620px; margin: 25px auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; direction: rtl; text-align: right;">
         <!-- Header -->
         <div class="header" dir="rtl" style="background: linear-gradient(135deg, #b45309 0%, #d97706 100%); color: #ffffff; padding: 24px 28px; text-align: center; direction: rtl;">
-            <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">منظومة عقارات تمليك</h1>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">منظومة عقارات رباح</h1>
             <div class="badge" style="display: inline-block; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.35); padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; margin-top: 10px; color: #ffffff;">⚠️ عقار بحاجة إلى تحديث ومتابعة</div>
         </div>
 
@@ -241,7 +241,7 @@
                     <tr dir="rtl" style="direction: rtl;">
                         <td class="info-label" dir="rtl" align="right" style="padding: 10px 14px; background-color: #f8fafc; border-radius: 0 8px 8px 0; font-size: 13px; font-weight: 700; color: #64748b; width: 34%; text-align: right; direction: rtl; vertical-align: middle;">&rlm;الوكيل المسؤول:&rlm;</td>
                         <td class="info-value" dir="rtl" align="right" style="padding: 10px 14px; background-color: #f8fafc; border-radius: 8px 0 0 8px; font-size: 13px; font-weight: 800; color: #0f172a; text-align: right; direction: rtl; vertical-align: middle;">
-                            <strong>{{ $agent ? $agent->name : 'إدارة تمليك' }}</strong>
+                            <strong>{{ $agent ? $agent->name : 'إدارة رباح' }}</strong>
                             @if($agent && $agent->phone)
                                 <br><span style="font-size: 11px; color: #64748b;">هاتف: {{ $agent->phone }}</span>
                             @endif
@@ -255,14 +255,14 @@
                 @if($property->google_map_url)
                     <a href="{{ $property->google_map_url }}" target="_blank" class="btn btn-map" style="display: inline-block; background: #0284c7; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 800; margin: 0 4px;">📍 موقع العقار على قوقل ماب</a>
                 @endif
-                <a href="{{ config('app.frontend_url', 'https://tamleekuae.com') }}/dashboard/properties/{{ $property->id }}/edit" target="_blank" class="btn" style="display: inline-block; background: #d97706; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 800; margin: 0 4px;">تحديث بيانات العقار الآن</a>
+                <a href="{{ config('app.frontend_url', 'https://rabah.eg') }}/dashboard/properties/{{ $property->id }}/edit" target="_blank" class="btn" style="display: inline-block; background: #d97706; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 800; margin: 0 4px;">تحديث بيانات العقار الآن</a>
             </div>
         </div>
 
         <!-- Footer -->
         <div class="footer" dir="rtl" style="background: #f8fafc; padding: 16px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; direction: rtl;">
-            تم إرسال هذا التنبيه التلقائي للمسؤول عن العقار وقائد فريقه وإدارة تمليك.<br>
-            © {{ date('Y') }} شركة تمليك لإدارة العقارات والاستثمار. جميع الحقوق محفوظة.
+            تم إرسال هذا التنبيه التلقائي للمسؤول عن العقار وقائد فريقه وإدارة رباح.<br>
+            © {{ date('Y') }} شركة رباح للتسويق العقاري. جميع الحقوق محفوظة.
         </div>
     </div>
 </body>

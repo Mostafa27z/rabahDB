@@ -187,7 +187,7 @@ public function resetPassword(Request $request)
 
     public function verifyEmail(Request $request, $id, $hash)
     {
-        $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'https://tamleekuae.com')), '/');
+        $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'https://rabah.eg')), '/');
 
         $user = User::find($id);
 

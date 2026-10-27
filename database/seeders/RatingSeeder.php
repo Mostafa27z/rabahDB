@@ -28,7 +28,9 @@ class RatingSeeder extends Seeder
         }
 
         // Clear existing ratings to avoid duplicates during testing
+        \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
         UserRating::truncate();
+        \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
 
         $ratings = [
             // --- SCENARIO A: Public Ratings (Visible to everyone) ---

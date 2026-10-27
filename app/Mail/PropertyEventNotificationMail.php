@@ -45,9 +45,9 @@ class PropertyEventNotificationMail extends Mailable
         $ref = $this->property->reference ?: 'Shj-' . $this->property->id;
         $subject = "[$this->eventTitle] عقار: {$this->property->title} (#{$ref})";
 
-                $fromAddress = config('mail.mailers.notice.username') ?: config('mail.from.address', 'notice@tamleekuae.com');
+        $fromAddress = config('mail.mailers.notice.username') ?: config('mail.from.address', 'notice@rabah.eg');
 
-        return $this->from($fromAddress, 'منظومة عقارات تمليك - Tamleek Alerts')
+        return $this->from($fromAddress, 'منظومة عقارات رباح - Rabah Alerts')
             ->subject($subject)
             ->view('emails.property_event_notification');
     }

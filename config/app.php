@@ -54,7 +54,7 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
-    'frontend_url' => env('FRONTEND_URL', 'https://tamleekuae.com'),
+    'frontend_url' => env('FRONTEND_URL', 'https://rabah.eg'),
 
     /*
     |--------------------------------------------------------------------------

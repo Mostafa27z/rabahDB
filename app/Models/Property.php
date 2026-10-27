@@ -99,6 +99,8 @@ class Property extends Model
         'formatted_details',
         'promoted_designers_details',
         'seo_keywords_list',
+        'bedrooms',
+        'bathrooms',
     ];
 
     /* =======================
@@ -475,5 +477,30 @@ class Property extends Model
         }
 
         return '';
+    }
+
+    public function getBedroomsAttribute(): ?string
+    {
+        if (!empty($this->search_bedrooms)) {
+            return (string)$this->search_bedrooms;
+        }
+        if (!empty($this->property_details)) {
+            $details = is_array($this->property_details) ? $this->property_details : json_decode($this->property_details, true);
+            if (!empty($details['bedrooms'])) {
+                return (string)$details['bedrooms'];
+            }
+        }
+        return null;
+    }
+
+    public function getBathroomsAttribute(): ?string
+    {
+        if (!empty($this->property_details)) {
+            $details = is_array($this->property_details) ? $this->property_details : json_decode($this->property_details, true);
+            if (!empty($details['bathrooms'])) {
+                return (string)$details['bathrooms'];
+            }
+        }
+        return null;
     }
 }

@@ -52,13 +52,13 @@ return [
 
         'notice' => [
             'transport' => env('MAIL_NOTICE_TRANSPORT', 'smtp'),
-            'host' => env('MAIL_NOTICE_HOST', env('MAIL_HOST', 'mail.tamleekuae.com')),
+            'host' => env('MAIL_NOTICE_HOST', env('MAIL_HOST', 'mail.rabah.eg')),
             'port' => env('MAIL_NOTICE_PORT', env('MAIL_PORT', 465)),
             'encryption' => env('MAIL_NOTICE_ENCRYPTION', env('MAIL_ENCRYPTION', 'ssl')),
-            'username' => env('MAIL_NOTICE_USERNAME', env('MAIL_USERNAME', 'notice@tamleekuae.com')),
+            'username' => env('MAIL_NOTICE_USERNAME', env('MAIL_USERNAME', 'notice@rabah.eg')),
             'password' => env('MAIL_NOTICE_PASSWORD', env('MAIL_PASSWORD')),
             'timeout' => null,
-            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'https://tamleekuae.com'), PHP_URL_HOST)),
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'https://rabah.eg'), PHP_URL_HOST)),
         ],
 
         'ses' => [
