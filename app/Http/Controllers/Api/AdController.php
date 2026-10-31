@@ -231,7 +231,8 @@ class AdController extends Controller
      */
     public function active()
     {
-        $ads = Ad::where('status', 'active')
+        $ads = Ad::with('property:id,reference,title,price,area_name,city,property_type,area_sqft,purpose')
+            ->where('status', 'active')
             ->orderByDesc('priority')
             ->latest()
             ->get();
@@ -239,6 +240,7 @@ class AdController extends Controller
         $formatted = $ads->map(function ($ad) {
             return [
                 'id' => $ad->id,
+                'property_id' => $ad->property_id,
                 'title' => $ad->title,
                 'distinction' => $ad->distinction,
                 'description' => $ad->description,
@@ -246,6 +248,15 @@ class AdController extends Controller
                 'button_link' => $ad->button_link,
                 'image_url' => $ad->image_full_url ?? $ad->image_url,
                 'status' => $ad->status,
+                'property' => $ad->property ? [
+                    'id' => $ad->property->id,
+                    'reference' => $ad->property->reference,
+                    'price' => $ad->property->price,
+                    'area_name' => $ad->property->area_name,
+                    'city' => $ad->property->city,
+                    'property_type' => $ad->property->property_type,
+                    'area_sqft' => $ad->property->area_sqft,
+                ] : null,
                 'created_at' => $ad->created_at,
             ];
         });

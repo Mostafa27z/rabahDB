@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Property;
 use App\Models\PropertyActivity;
 use App\Models\PropertyBookmark;
+use App\Models\PropertySubmission;
 use App\Models\PropertyView;
 use App\Models\User;
 use App\Services\PropertyNotificationService;
@@ -1358,10 +1359,45 @@ class PropertyManagementController extends Controller
     }
 
     /**
+     * Ensure property_submissions table exists (auto-creates if migration hasn't run yet)
+     */
+    protected function ensureSubmissionsTable(): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('property_submissions')) {
+            \Illuminate\Support\Facades\Schema::create('property_submissions', function (\Illuminate\Database\Schema\Blueprint $table) {
+                $table->id();
+                $table->string('reference')->nullable()->index();
+                $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->string('client_name');
+                $table->string('contact_phone');
+                $table->string('email')->nullable();
+                $table->string('title');
+                $table->string('property_type')->nullable();
+                $table->string('area_name')->nullable();
+                $table->decimal('area_sqm', 12, 2)->nullable();
+                $table->decimal('price', 15, 2)->nullable();
+                $table->decimal('price_per_sqm', 15, 2)->nullable();
+                $table->text('property_details')->nullable();
+                $table->json('images')->nullable();
+                $table->json('pdf_file')->nullable();
+                $table->string('status')->default('new')->index();
+                $table->string('priority')->default('normal')->index();
+                $table->text('notes')->nullable();
+                $table->foreignId('assigned_to')->nullable()->constrained('users')->nullOnDelete();
+                $table->foreignId('converted_property_id')->nullable()->constrained('properties')->nullOnDelete();
+                $table->timestamps();
+            });
+        }
+    }
+
+    /**
      * Handle client property submission (from frontend submit-property form)
+     * Stores the submission independently in property_submissions table for review before publishing.
      */
     public function clientSubmit(Request $request)
     {
+        $this->ensureSubmissionsTable();
+
         $request->validate([
             'title'           => 'required|string|max:500',
             'propertyType'    => 'nullable|string|max:255',
@@ -1376,6 +1412,7 @@ class PropertyManagementController extends Controller
             'clientName'      => 'nullable|string|max:255',
             'contactPhone'    => 'nullable|string|max:50',
             'email'           => 'nullable|string|max:255',
+            'userId'          => 'nullable|integer',
             'images.*'        => 'nullable|file|mimes:jpeg,png,jpg,webp,avif|max:20480',
             'pdfFile'         => 'nullable|file|mimes:pdf|max:30720',
         ]);
@@ -1389,93 +1426,257 @@ class PropertyManagementController extends Controller
         $email = $request->input('email') ?? '';
         $price = $request->input('price') ? (float)$request->input('price') : null;
         $areaNum = $area ? (float)$area : null;
-
-        $nextId = (Property::max('id') ?? 0) + 1;
-        $reference = 'RBH' . now()->format('ym') . '-' . $nextId;
+        $userId = auth('sanctum')->id() ?? ($request->input('userId') ? (int)$request->input('userId') : null);
+        if ($userId && !User::where('id', $userId)->exists()) {
+            $userId = null;
+        }
 
         $galleryPaths = [];
-        $coverPath = null;
         if ($request->hasFile('images')) {
             $uploadedImages = $request->file('images');
             if (!is_array($uploadedImages)) {
                 $uploadedImages = [$uploadedImages];
             }
-            foreach ($uploadedImages as $index => $img) {
-                $path = $img->store('properties/gallery', 'public');
+            foreach ($uploadedImages as $img) {
+                $path = $img->store('properties/submissions/gallery', 'public');
                 $galleryPaths[] = $path;
-                if ($index === 0) {
-                    $coverPath = $path;
-                }
             }
         }
 
-        $sourceFiles = [];
+        $pdfData = null;
         if ($request->hasFile('pdfFile')) {
             $pdf = $request->file('pdfFile');
-            $path = $pdf->store('properties/sources', 'public');
-            $sourceFiles[] = [
+            $path = $pdf->store('properties/submissions/sources', 'public');
+            $pdfData = [
                 'name' => $pdf->getClientOriginalName(),
                 'path' => $path,
                 'size' => $pdf->getSize(),
             ];
         }
 
-        $pricePerFoot = ($price && $areaNum && $areaNum > 0) ? round($price / $areaNum, 2) : null;
-        $sourceNotes = "بيانات مقدم العقار:\nالاسم: {$clientName}\nالهاتف: {$contactPhone}\nالبريد: {$email}";
+        $pricePerSqm = ($price && $areaNum && $areaNum > 0) ? round($price / $areaNum, 2) : null;
+
+        $submission = PropertySubmission::create([
+            'user_id'          => $userId,
+            'client_name'      => $clientName,
+            'contact_phone'    => $contactPhone,
+            'email'            => $email ?: null,
+            'title'            => $request->input('title'),
+            'property_type'    => $propType,
+            'area_name'        => $areaName,
+            'area_sqm'         => $areaNum,
+            'price'            => $price,
+            'price_per_sqm'    => $pricePerSqm,
+            'property_details' => $propDetails,
+            'images'           => $galleryPaths,
+            'pdf_file'         => $pdfData,
+            'status'           => 'new',
+            'priority'         => 'normal',
+        ]);
+
+        Log::info('New client property submission received', [
+            'submission_id' => $submission->id,
+            'reference'     => $submission->reference,
+            'client_name'   => $clientName,
+            'phone'         => $contactPhone,
+        ]);
+
+        return response()->json([
+            'success'   => true,
+            'id'        => $submission->id,
+            'reference' => $submission->reference,
+            'message'   => 'تم استلام بيانات العقار بنجاح وسيتم مراجعته والتواصل معكم قريباً',
+        ], 201);
+    }
+
+    /**
+     * List all client property submissions with KPI statistics and filters (Protected)
+     */
+    public function indexSubmissions(Request $request)
+    {
+        $this->ensureSubmissionsTable();
+
+        $query = PropertySubmission::query()->latest();
+
+        if ($search = $request->input('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('reference', 'like', "%{$search}%")
+                  ->orWhere('client_name', 'like', "%{$search}%")
+                  ->orWhere('contact_phone', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('area_name', 'like', "%{$search}%")
+                  ->orWhere('property_type', 'like', "%{$search}%")
+                  ->orWhere('property_details', 'like', "%{$search}%");
+            });
+        }
+
+        if ($status = $request->input('status')) {
+            if ($status !== 'all') {
+                $query->where('status', $status);
+            }
+        }
+
+        if ($priority = $request->input('priority')) {
+            if ($priority !== 'all') {
+                $query->where('priority', $priority);
+            }
+        }
+
+        if ($propertyType = $request->input('property_type')) {
+            if ($propertyType !== 'all') {
+                $query->where('property_type', 'like', "%{$propertyType}%");
+            }
+        }
+
+        $submissions = $query->get();
+
+        $stats = [
+            'total'      => PropertySubmission::count(),
+            'new'        => PropertySubmission::where('status', 'new')->count(),
+            'contacted'  => PropertySubmission::where('status', 'contacted')->count(),
+            'inspecting' => PropertySubmission::where('status', 'inspecting')->count(),
+            'published'  => PropertySubmission::where('status', 'published')->count(),
+            'rejected'   => PropertySubmission::where('status', 'rejected')->count(),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'stats'   => $stats,
+            'data'    => $submissions,
+        ]);
+    }
+
+    /**
+     * Update a client property submission status, priority, notes, etc. (Protected)
+     */
+    public function updateSubmission(Request $request, $id)
+    {
+        $submission = PropertySubmission::findOrFail($id);
+
+        $validated = $request->validate([
+            'status'           => 'nullable|string|in:new,contacted,inspecting,published,rejected',
+            'priority'         => 'nullable|string|in:low,normal,high,urgent',
+            'notes'            => 'nullable|string',
+            'assigned_to'      => 'nullable|exists:users,id',
+            'title'            => 'nullable|string|max:500',
+            'property_type'    => 'nullable|string|max:255',
+            'area_name'        => 'nullable|string|max:255',
+            'area_sqm'         => 'nullable|numeric|min:0',
+            'price'            => 'nullable|numeric|min:0',
+            'property_details' => 'nullable|string',
+        ]);
+
+        if (isset($validated['price']) || isset($validated['area_sqm'])) {
+            $p = $validated['price'] ?? $submission->price;
+            $a = $validated['area_sqm'] ?? $submission->area_sqm;
+            if ($p && $a && $a > 0) {
+                $validated['price_per_sqm'] = round((float)$p / (float)$a, 2);
+            }
+        }
+
+        $submission->update($validated);
+
+        return response()->json([
+            'success'    => true,
+            'message'    => 'تم تحديث بيانات طلب عرض العقار بنجاح',
+            'submission' => $submission->fresh(['user', 'assignedAgent', 'convertedProperty']),
+        ]);
+    }
+
+    /**
+     * Delete a client property submission (Protected)
+     */
+    public function destroySubmission($id)
+    {
+        $submission = PropertySubmission::findOrFail($id);
+        $submission->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم حذف طلب عرض العقار بنجاح',
+        ]);
+    }
+
+    /**
+     * Approve and convert a client property submission into an official Property in the catalog
+     */
+    public function convertSubmissionToProperty(Request $request, $id)
+    {
+        $submission = PropertySubmission::findOrFail($id);
+
+        if ($submission->converted_property_id && Property::where('id', $submission->converted_property_id)->exists()) {
+            $existingProperty = Property::find($submission->converted_property_id);
+            $submission->update(['status' => 'published']);
+            return response()->json([
+                'success'    => true,
+                'already_converted' => true,
+                'message'    => 'تم تحويل هذا الطلب لعقار رسمي مسبقاً',
+                'property'   => $existingProperty,
+                'submission' => $submission->fresh(['user', 'assignedAgent', 'convertedProperty']),
+            ]);
+        }
+
+        $galleryPaths = is_array($submission->images) ? $submission->images : [];
+        $coverPath = $galleryPaths[0] ?? null;
+        $sourceFiles = $submission->pdf_file ? [$submission->pdf_file] : [];
+
+        $sourceNotes = "بيانات مالك ومقدم العقار:\nالاسم: {$submission->client_name}\nالهاتف: {$submission->contact_phone}"
+            . ($submission->email ? "\nالبريد الإلكتروني: {$submission->email}" : "")
+            . ($submission->notes ? "\n\nملاحظات المراجعة والمعاينة:\n{$submission->notes}" : "");
+
+        $nextId = (Property::max('id') ?? 0) + 1;
+        $reference = 'Shj' . now()->format('ym') . '-' . $nextId;
 
         $property = Property::create([
-            'title'                 => $request->input('title'),
+            'title'                 => $submission->title,
             'reference'             => $reference,
-            'property_type'         => $propType,
-            'property_details'      => $propDetails,
-            'description'           => $propDetails,
-            'price'                 => $price,
-            'area_sqft'             => $areaNum,
-            'price_per_foot'        => $pricePerFoot,
-            'area_name'             => $areaName,
+            'property_type'         => $submission->property_type ?: 'عقار',
+            'purpose'               => $request->input('purpose', 'sale'),
+            'property_details'      => $submission->property_details,
+            'description'           => $submission->property_details,
+            'price'                 => $submission->price,
+            'area_sqft'             => $submission->area_sqm,
+            'price_per_foot'        => $submission->price_per_sqm,
+            'area_name'             => $submission->area_name ?: 'سوهاج',
             'city'                  => 'سوهاج',
-            'status'                => 'new',
+            'status'                => $request->input('property_status', 'available'),
             'priority'              => 'medium',
             'cover_image'           => $coverPath,
             'cover_image_watermark' => $coverPath,
             'images'                => $galleryPaths,
-            'source_name'           => $clientName,
+            'source_name'           => $submission->client_name,
             'source_notes'          => $sourceNotes,
             'source_files'          => $sourceFiles,
-            'company_details'       => "عقار مقدم من العميل: {$clientName} - هاتف: {$contactPhone} - إيميل: {$email}",
+            'company_details'       => "عقار معتمد من طلبات عرض العقارات (#{$submission->reference}) - المالك: {$submission->client_name} - هاتف: {$submission->contact_phone}",
             'created_by_id'         => auth('sanctum')->id() ?? 1,
             'user_id'               => auth('sanctum')->id() ?? 1,
         ]);
 
-        // Build search index
-        try {
-            $indexData = PropertySearchEngineService::buildIndex($property);
-            if (!empty($indexData)) {
-                $property->update($indexData);
-            }
-        } catch (\Throwable $e) {
-            Log::warning("ClientSubmit: Search index build warning: " . $e->getMessage());
-        }
+        // Record property activity
+        PropertyActivity::create([
+            'property_id'   => $property->id,
+            'user_id'       => auth('sanctum')->id() ?? 1,
+            'activity_type' => 'created_from_submission',
+            'title'         => 'اعتماد عقار من طلبات اعرض عقارك',
+            'description'   => "تم اعتماد ونشر العقار من طلب المالك: {$submission->client_name} ({$submission->reference})",
+            'new_data'      => [
+                'submission_id'        => $submission->id,
+                'submission_reference' => $submission->reference,
+                'client_name'          => $submission->client_name,
+            ],
+        ]);
 
-        // Notify admin team
-        try {
-            PropertyNotificationService::notifyTeam(
-                $property,
-                'created',
-                "تم تسجيل عقار جديد من العميل: {$clientName}",
-                null,
-                $property->price,
-                $clientName
-            );
-        } catch (\Throwable $e) {
-            Log::warning("ClientSubmit: Notification warning: " . $e->getMessage());
-        }
+        $submission->update([
+            'status'                => 'published',
+            'converted_property_id' => $property->id,
+        ]);
 
         return response()->json([
-            'success'   => true,
-            'id'        => $property->id,
-            'reference' => $property->reference,
-            'message'   => 'تم استلام بيانات العقار بنجاح وسيتم مراجعته والتواصل معكم قريباً',
+            'success'    => true,
+            'message'    => 'تم اعتماد العقار ونشره رسمياً في المنصة بنجاح',
+            'property'   => $property,
+            'submission' => $submission->fresh(['user', 'assignedAgent', 'convertedProperty']),
         ], 201);
     }
 }

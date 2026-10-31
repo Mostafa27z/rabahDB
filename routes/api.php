@@ -76,6 +76,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/properties/{id}/request-promotion', [PropertyManagementController::class, 'requestPromotion'])->whereNumber('id');
     Route::post('/properties/{id}/submit-promotion', [PropertyManagementController::class, 'submitPromotion'])->whereNumber('id');
     Route::post('/properties/{id}/cancel-promotion', [PropertyManagementController::class, 'cancelPromotion'])->whereNumber('id');
+
+    // Client Property Submissions ("طلبات عرض العقارات")
+    Route::get('/property-submissions', [PropertyManagementController::class, 'indexSubmissions']);
+    Route::match(['patch', 'put'], '/property-submissions/{id}', [PropertyManagementController::class, 'updateSubmission'])->whereNumber('id');
+    Route::delete('/property-submissions/{id}', [PropertyManagementController::class, 'destroySubmission'])->whereNumber('id');
+    Route::post('/property-submissions/{id}/convert', [PropertyManagementController::class, 'convertSubmissionToProperty'])->whereNumber('id');
 });
 
 // Public: get all real estates (Mapped to local DB for instant speed)
