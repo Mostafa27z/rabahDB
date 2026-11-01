@@ -5,10 +5,10 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CareerController;
-// Career (Join Us form)
-Route::post('/career/apply', [CareerController::class, 'store']);
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
+// Career (Join Us form) - Throttled to avoid abuse
+Route::post('/career/apply', [CareerController::class, 'store'])->middleware('throttle:10,1');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
 
 use App\Http\Controllers\Api\AdController;
 
@@ -32,9 +32,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/update-profile', [AuthController::class, 'updateProfile']);
     Route::get('/me', fn () => auth()->user());
 });
-Route::post('forgot-password', [AuthController::class, 'sendOtp']);
-Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
-Route::post('reset-password', [AuthController::class, 'resetPassword']);
+Route::post('forgot-password', [AuthController::class, 'sendOtp'])->middleware('throttle:5,1');
+Route::post('verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:10,1');
+Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\URL;
@@ -51,11 +51,10 @@ use App\Http\Controllers\Api\PropertyManagementController;
 use App\Http\Controllers\Api\DashboardStatsController;
 
 // Public property routes (Fast Local DB)
-Route::post('/properties/submit', [PropertyManagementController::class, 'clientSubmit']);
+Route::post('/properties/submit', [PropertyManagementController::class, 'clientSubmit'])->middleware('throttle:10,1');
 Route::get('/properties/public', [PropertyManagementController::class, 'index']);
 Route::get('/properties/home', [PropertyManagementController::class, 'homeProperties']);
 Route::get('/properties/featured-count', [PropertyManagementController::class, 'featuredCount']);
-Route::patch('/properties/{id}/toggle-featured', [PropertyManagementController::class, 'toggleFeatured'])->whereNumber('id');
 Route::get('/properties/types', [PropertyManagementController::class, 'getTypes']);
 Route::get('/properties/{id}', [PropertyManagementController::class, 'show'])->whereNumber('id');
 
@@ -71,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Property Management (Fast Local DB)
     Route::get('/properties', [PropertyManagementController::class, 'index']);
     Route::post('/properties', [PropertyManagementController::class, 'store']);
+    Route::patch('/properties/{id}/toggle-featured', [PropertyManagementController::class, 'toggleFeatured'])->whereNumber('id');
     Route::match(['put', 'post'], '/properties/{id}', [PropertyManagementController::class, 'update'])->whereNumber('id');
     Route::delete('/properties/{id}', [PropertyManagementController::class, 'destroy'])->whereNumber('id');
     Route::post('/properties/{id}/request-promotion', [PropertyManagementController::class, 'requestPromotion'])->whereNumber('id');
@@ -127,8 +127,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/leads/{id}', [CommunicationController::class, 'destroyLead']);
 });
 
-Route::post('/communication/lead', [CommunicationController::class, 'storeLead']);
-Route::post('/communication/contact', [CommunicationController::class, 'storeContact']);
+Route::post('/communication/lead', [CommunicationController::class, 'storeLead'])->middleware('throttle:10,1');
+Route::post('/communication/contact', [CommunicationController::class, 'storeContact'])->middleware('throttle:10,1');
 
 use App\Http\Controllers\Api\CompanyDetailController;
 

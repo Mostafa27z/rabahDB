@@ -13,6 +13,7 @@ use App\Mail\SendOtpMail;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
@@ -123,67 +124,99 @@ class AuthController extends Controller
         return response()->json(['message' => 'Logged out']);
     }
     public function sendOtp(Request $request)
-{
-    $request->validate(['email' => 'required|email|exists:users,email']);
+    {
+        $request->validate(['email' => 'required|email|exists:users,email']);
 
-    $otp = rand(100000, 999999);
+        $throttleKey = 'send-otp:' . $request->ip() . ':' . strtolower($request->email);
+        if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+            return response()->json([
+                'message' => "Too many OTP requests. Please wait {$seconds} seconds."
+            ], 429);
+        }
+        RateLimiter::hit($throttleKey, 600);
 
-    PasswordResetOtp::updateOrCreate(
-        ['email' => $request->email],
-        [
-            'otp' => $otp,
-            'expires_at' => Carbon::now()->addMinutes(10)
-        ]
-    );
+        $otp = rand(100000, 999999);
 
-    Mail::to($request->email)->send(new SendOtpMail($otp));
+        PasswordResetOtp::updateOrCreate(
+            ['email' => $request->email],
+            [
+                'otp' => $otp,
+                'expires_at' => Carbon::now()->addMinutes(10)
+            ]
+        );
 
-    return response()->json(['message' => 'OTP sent to email']);
-}
-public function verifyOtp(Request $request)
-{
-    $request->validate([
-        'email' => 'required|email',
-        'otp' => 'required'
-    ]);
+        Mail::to($request->email)->send(new SendOtpMail($otp));
 
-    $record = PasswordResetOtp::where('email', $request->email)
-        ->where('otp', $request->otp)
-        ->first();
-
-    if (! $record) {
-        return response()->json(['message' => 'Invalid OTP'], 400);
+        return response()->json(['message' => 'OTP sent to email']);
     }
 
-    if ($record->expires_at < now()) {
-        return response()->json(['message' => 'OTP expired'], 400);
+    public function verifyOtp(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required'
+        ]);
+
+        $verifyKey = 'verify-otp:' . strtolower($request->email);
+        if (RateLimiter::tooManyAttempts($verifyKey, 5)) {
+            $seconds = RateLimiter::availableIn($verifyKey);
+            return response()->json([
+                'message' => "Too many failed attempts. Please wait {$seconds} seconds before trying again."
+            ], 429);
+        }
+
+        $record = PasswordResetOtp::where('email', $request->email)
+            ->where('otp', $request->otp)
+            ->first();
+
+        if (! $record) {
+            RateLimiter::hit($verifyKey, 900);
+            return response()->json(['message' => 'Invalid OTP'], 400);
+        }
+
+        if ($record->expires_at < now()) {
+            return response()->json(['message' => 'OTP expired'], 400);
+        }
+
+        RateLimiter::clear($verifyKey);
+
+        return response()->json(['message' => 'OTP verified']);
     }
 
-    return response()->json(['message' => 'OTP verified']);
-}
-public function resetPassword(Request $request)
-{
-    $request->validate([
-        'email' => 'required|email',
-        'otp' => 'required',
-        'password' => ['required', Password::min(8)]
-    ]);
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required',
+            'password' => ['required', Password::min(8)]
+        ]);
 
-    $record = PasswordResetOtp::where('email', $request->email)
-        ->where('otp', $request->otp)
-        ->first();
+        $verifyKey = 'verify-otp:' . strtolower($request->email);
+        if (RateLimiter::tooManyAttempts($verifyKey, 5)) {
+            $seconds = RateLimiter::availableIn($verifyKey);
+            return response()->json([
+                'message' => "Too many failed attempts. Please wait {$seconds} seconds before trying again."
+            ], 429);
+        }
 
-    if (! $record || $record->expires_at < now()) {
-        return response()->json(['message' => 'Invalid or expired OTP'], 400);
+        $record = PasswordResetOtp::where('email', $request->email)
+            ->where('otp', $request->otp)
+            ->first();
+
+        if (! $record || $record->expires_at < now()) {
+            RateLimiter::hit($verifyKey, 900);
+            return response()->json(['message' => 'Invalid or expired OTP'], 400);
+        }
+
+        User::where('email', $request->email)
+            ->update(['password' => Hash::make($request->password)]);
+
+        $record->delete(); // prevent reuse
+        RateLimiter::clear($verifyKey);
+
+        return response()->json(['message' => 'Password reset successful']);
     }
-
-    User::where('email', $request->email)
-        ->update(['password' => Hash::make($request->password)]);
-
-    $record->delete(); // prevent reuse
-
-    return response()->json(['message' => 'Password reset successful']);
-}
 
     public function verifyEmail(Request $request, $id, $hash)
     {

@@ -362,7 +362,10 @@ class PropertyManagementController extends Controller
      */
     public function store(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بإضافة عقارات في لوحة التحكم.'], 403);
+        }
 
         $validated = $request->validate([
             'title' => 'required|string|max:500',
@@ -527,22 +530,25 @@ class PropertyManagementController extends Controller
     public function update(Request $request, $id)
     {
         $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user) {
+            abort(401, 'Unauthenticated');
+        }
         $property = Property::findOrFail($id);
 
-        // Authorization check for editing
-        if ($user) {
-            if ($user->isAdmin()) {
-                // Admin can update any property
-            } elseif ($user->isTeamLead()) {
-                $teamAgentIds = $user->agents()->pluck('id')->toArray();
-                if ($property->user_id !== $user->id && !in_array($property->user_id, $teamAgentIds)) {
-                    abort(403, 'غير مصرح لك بتعديل هذا العقار. يحق لقائد الفريق تعديل عقاراته وعقارات فريقه فقط.');
-                }
-            } elseif ($user->isAgent()) {
-                if ($property->user_id !== $user->id) {
-                    abort(403, 'غير مصرح لك بتعديل هذا العقار. يحق للوكيل تعديل عقاراته الخاصة فقط.');
-                }
+        // Authorization check for editing (Deny by default)
+        if ($user->isAdmin()) {
+            // Admin can update any property
+        } elseif ($user->isTeamLead()) {
+            $teamAgentIds = $user->agents()->pluck('id')->toArray();
+            if ($property->user_id !== $user->id && !in_array($property->user_id, $teamAgentIds)) {
+                abort(403, 'غير مصرح لك بتعديل هذا العقار. يحق لقائد الفريق تعديل عقاراته وعقارات فريقه فقط.');
             }
+        } elseif ($user->isAgent()) {
+            if ($property->user_id !== $user->id) {
+                abort(403, 'غير مصرح لك بتعديل هذا العقار. يحق للوكيل تعديل عقاراته الخاصة فقط.');
+            }
+        } else {
+            abort(403, 'غير مصرح لك بتعديل هذا العقار.');
         }
 
         $validated = $request->validate([
@@ -755,21 +761,24 @@ class PropertyManagementController extends Controller
     public function destroy($id)
     {
         $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user) {
+            abort(401, 'Unauthenticated');
+        }
         $property = Property::findOrFail($id);
 
-        if ($user) {
-            if ($user->isAdmin()) {
-                // Admin can delete any property
-            } elseif ($user->isTeamLead()) {
-                $teamAgentIds = $user->agents()->pluck('id')->toArray();
-                if ($property->user_id !== $user->id && !in_array($property->user_id, $teamAgentIds)) {
-                    abort(403, 'غير مصرح لك بحذف هذا العقار.');
-                }
-            } elseif ($user->isAgent()) {
-                if ($property->user_id !== $user->id) {
-                    abort(403, 'غير مصرح لك بحذف هذا العقار.');
-                }
+        if ($user->isAdmin()) {
+            // Admin can delete any property
+        } elseif ($user->isTeamLead()) {
+            $teamAgentIds = $user->agents()->pluck('id')->toArray();
+            if ($property->user_id !== $user->id && !in_array($property->user_id, $teamAgentIds)) {
+                abort(403, 'غير مصرح لك بحذف هذا العقار.');
             }
+        } elseif ($user->isAgent()) {
+            if ($property->user_id !== $user->id) {
+                abort(403, 'غير مصرح لك بحذف هذا العقار.');
+            }
+        } else {
+            abort(403, 'غير مصرح لك بحذف هذا العقار.');
         }
 
         $userName = $user ? $user->name : 'المسؤول';
@@ -1074,10 +1083,18 @@ class PropertyManagementController extends Controller
     }
 
     /**
-     * Quick toggle for is_featured (Max 12 limit)
+     * Quick toggle for is_featured (Max 12 limit) - Protected (Admin & Team Lead Only)
      */
     public function toggleFeatured($id)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح لك بتعديل العقارات المميزة للصفحة الرئيسية.'
+            ], 403);
+        }
+
         $property = Property::findOrFail($id);
 
         if (!$property->is_featured) {
@@ -1494,6 +1511,11 @@ class PropertyManagementController extends Controller
      */
     public function indexSubmissions(Request $request)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بالوصول إلى طلبات عرض العقارات.'], 403);
+        }
+
         $this->ensureSubmissionsTable();
 
         $query = PropertySubmission::query()->latest();
@@ -1552,6 +1574,11 @@ class PropertyManagementController extends Controller
      */
     public function updateSubmission(Request $request, $id)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بتعديل طلبات عرض العقارات.'], 403);
+        }
+
         $submission = PropertySubmission::findOrFail($id);
 
         $validated = $request->validate([
@@ -1589,6 +1616,11 @@ class PropertyManagementController extends Controller
      */
     public function destroySubmission($id)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || !$user->isAdmin()) {
+            return response()->json(['message' => 'يحق للمشرف العام فقط حذف طلبات عرض العقارات.'], 403);
+        }
+
         $submission = PropertySubmission::findOrFail($id);
         $submission->delete();
 
@@ -1603,6 +1635,11 @@ class PropertyManagementController extends Controller
      */
     public function convertSubmissionToProperty(Request $request, $id)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بتحويل طلبات عرض العقارات.'], 403);
+        }
+
         $submission = PropertySubmission::findOrFail($id);
 
         if ($submission->converted_property_id && Property::where('id', $submission->converted_property_id)->exists()) {

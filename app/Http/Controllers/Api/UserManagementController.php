@@ -412,14 +412,16 @@ class UserManagementController extends Controller
         $user = auth()->user();
         $target = User::findOrFail($id);
 
-        // Permission checks
-        if ($user->isTeamLead() && $target->role !== 'agent') {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        if ($user->isTeamLead() && $target->team_lead_id !== $user->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        if ($user->isAgent()) {
+        // Permission checks for update (Deny by default)
+        if ($user->isAdmin()) {
+            // Admin can update any user
+        } elseif ($user->isTeamLead()) {
+            if ($target->role !== 'agent' || $target->team_lead_id !== $user->id) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+        } elseif ($user->id === $target->id) {
+            // User can update their own profile (cannot change role or team lead)
+        } else {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -482,14 +484,14 @@ class UserManagementController extends Controller
         $user = auth()->user();
         $target = User::findOrFail($id);
 
-        // Permission checks
-        if ($user->isTeamLead() && $target->role !== 'agent') {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        if ($user->isTeamLead() && $target->team_lead_id !== $user->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        if ($user->isAgent()) {
+        // Permission checks (Deny by default)
+        if ($user->isAdmin()) {
+            // Admin can delete users
+        } elseif ($user->isTeamLead()) {
+            if ($target->role !== 'agent' || $target->team_lead_id !== $user->id) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+        } else {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

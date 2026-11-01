@@ -24,7 +24,11 @@ class CommunicationController extends Controller
         $entityId = $request->input('entity_id');
         $content = $request->input('comment');
 
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بإضافة ملاحظات داخلية على هذا العقار.'], 403);
+        }
+
         $userName = $user->name ?? 'مستخدم';
         $userEmail = $user->email ?? '';
         $userPhone = $user->phone ?? '';
@@ -157,7 +161,23 @@ class CommunicationController extends Controller
      */
     public function indexLeads(Request $request)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بالوصول إلى طلبات العملاء.'], 403);
+        }
+
         $query = Lead::query()->latest();
+
+        // Scope leads: Agents only see assigned leads, Team Leads see their own and their team's leads
+        if ($user->isAgent()) {
+            $query->where('assigned_to', $user->id);
+        } elseif ($user->isTeamLead()) {
+            $agentIds = $user->agents()->pluck('id')->toArray();
+            $agentIds[] = $user->id;
+            $query->where(function ($q) use ($agentIds) {
+                $q->whereIn('assigned_to', $agentIds)->orWhereNull('assigned_to');
+            });
+        }
 
         // Search filter
         if ($search = $request->input('search')) {
@@ -194,14 +214,25 @@ class CommunicationController extends Controller
 
         $leads = $query->get();
 
-        // Calculate KPI Stats
+        // Calculate KPI Stats scoped to permitted leads
+        $statsQuery = Lead::query();
+        if ($user->isAgent()) {
+            $statsQuery->where('assigned_to', $user->id);
+        } elseif ($user->isTeamLead()) {
+            $agentIds = $user->agents()->pluck('id')->toArray();
+            $agentIds[] = $user->id;
+            $statsQuery->where(function ($q) use ($agentIds) {
+                $q->whereIn('assigned_to', $agentIds)->orWhereNull('assigned_to');
+            });
+        }
+
         $stats = [
-            'total'       => Lead::count(),
-            'new'         => Lead::where('status', 'new')->count(),
-            'contacted'   => Lead::where('status', 'contacted')->count(),
-            'negotiation' => Lead::where('status', 'negotiation')->count(),
-            'converted'   => Lead::where('status', 'converted')->count(),
-            'lost'        => Lead::where('status', 'lost')->count(),
+            'total'       => (clone $statsQuery)->count(),
+            'new'         => (clone $statsQuery)->where('status', 'new')->count(),
+            'contacted'   => (clone $statsQuery)->where('status', 'contacted')->count(),
+            'negotiation' => (clone $statsQuery)->where('status', 'negotiation')->count(),
+            'converted'   => (clone $statsQuery)->where('status', 'converted')->count(),
+            'lost'        => (clone $statsQuery)->where('status', 'lost')->count(),
         ];
 
         return response()->json([
@@ -216,7 +247,22 @@ class CommunicationController extends Controller
      */
     public function updateLead(Request $request, $id)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isTeamLead() && !$user->isAgent())) {
+            return response()->json(['message' => 'غير مصرح لك بتعديل طلبات العملاء.'], 403);
+        }
+
         $lead = Lead::findOrFail($id);
+
+        if ($user->isAgent() && $lead->assigned_to !== $user->id) {
+            return response()->json(['message' => 'غير مصرح لك بتعديل طلب عميل غير مسند إليك.'], 403);
+        } elseif ($user->isTeamLead()) {
+            $agentIds = $user->agents()->pluck('id')->toArray();
+            $agentIds[] = $user->id;
+            if ($lead->assigned_to && !in_array($lead->assigned_to, $agentIds)) {
+                return response()->json(['message' => 'غير مصرح لك بتعديل هذا الطلب.'], 403);
+            }
+        }
 
         $validated = $request->validate([
             'status'        => 'nullable|string|in:new,contacted,negotiation,converted,lost',
@@ -237,10 +283,15 @@ class CommunicationController extends Controller
     }
 
     /**
-     * Delete a lead (Protected)
+     * Delete a lead (Protected - Admin Only)
      */
     public function destroyLead($id)
     {
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if (!$user || !$user->isAdmin()) {
+            return response()->json(['message' => 'يحق للمشرف العام فقط حذف طلبات العملاء.'], 403);
+        }
+
         $lead = Lead::findOrFail($id);
         $lead->delete();
 
